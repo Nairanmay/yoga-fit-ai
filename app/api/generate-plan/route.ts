@@ -2,55 +2,39 @@ import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export async function POST(req: Request) {
-  let name, age, weight, goals, duration, injuries;
-
   try {
-    const body = await req.json();
-    name = body.name;
-    age = body.age;
-    weight = body.weight;
-    goals = body.goals;
-    duration = body.duration;
-    injuries = body.injuries;
-
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) throw new Error('Missing GEMINI_API_KEY');
+    if (!apiKey) {
+      console.error("❌ Error: Missing GEMINI_API_KEY in Environment Variables");
+      throw new Error('Missing API Key');
+    }
+
+    const body = await req.json();
+    const { name, age, weight, goals, duration, injuries } = body;
 
     const genAI = new GoogleGenerativeAI(apiKey);
+    // Use the standard stable model
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     const prompt = `
-      You are an expert Yoga Instructor (Iyengar style) and Nutritionist. 
-      Create a highly personalized 1-day plan for:
-      - Name: ${name}
-      - Profile: ${age} years old, ${weight}kg
-      - Main Goals: ${goals.join(", ")}
-      - Session Duration: ${duration} minutes
-      - Physical Issues: ${injuries || "None"}
+      You are an expert Yoga Instructor. Create a JSON-only 1-day plan for:
+      - Name: ${name || "Yogi"}
+      - Profile: ${age || 25} yrs, ${weight || 70}kg
+      - Goals: ${goals?.join(", ") || "General Fitness"}
+      - Duration: ${duration || 30} mins
+      - Injuries: ${injuries || "None"}
 
-      Return strictly valid JSON (no markdown) with this structure:
+      Return strictly valid JSON. No markdown backticks. No intro text.
+      Structure:
       {
-        "summary": "A 1-sentence motivating personalized summary for ${name}.",
+        "summary": "Motivating sentence.",
         "routine": [
-          { 
-            "name": "Pose Name (English)", 
-            "sanskrit": "Sanskrit Name",
-            "duration": "Time (e.g., 2 mins)", 
-            "type": "Warm Up | Flow | Strength | Cool Down",
-            "benefit": "Specific benefit related to ${goals[0]}",
-            "instruction": "Brief 1-sentence cue on how to do it correctly."
-          }
+          { "name": "Pose Name", "sanskrit": "Sanskrit", "duration": "Time", "type": "Warm Up", "benefit": "Why", "instruction": "How" }
         ],
         "diet": [
-          { 
-            "time": "Pre-Yoga", 
-            "item": "Specific food item", 
-            "reason": "Why this helps energy/recovery." 
-          },
-          { "time": "Post-Yoga", "item": "Meal suggestion", "reason": "Recovery benefit." },
-          { "time": "Lunch", "item": "Healthy Indian/Global meal", "reason": "Sustained energy." }
+          { "time": "Pre-Yoga", "item": "Food", "reason": "Why" }
         ],
-        "mindfulness": "A short breathing or meditation tip."
+        "mindfulness": "Tip"
       }
     `;
 
@@ -58,26 +42,36 @@ export async function POST(req: Request) {
     const response = await result.response;
     let text = response.text();
 
-    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    const plan = JSON.parse(text);
+    console.log("🤖 AI Raw Response:", text.substring(0, 100) + "..."); // Log first 100 chars for debug
+
+    // --- ROBUST JSON CLEANING ---
+    // Sometimes AI adds "```json ... ```" or "Here is the plan: { ... }"
+    // We find the first "{" and the last "}" to extract just the JSON object.
+    const jsonStart = text.indexOf('{');
+    const jsonEnd = text.lastIndexOf('}');
     
+    if (jsonStart !== -1 && jsonEnd !== -1) {
+      text = text.substring(jsonStart, jsonEnd + 1);
+    }
+
+    const plan = JSON.parse(text);
     return NextResponse.json(plan);
 
   } catch (error: any) {
-    console.error('⚠️ AI Gen Failed:', error.message);
+    console.error('⚠️ AI Plan Generation Failed:', error.message || error);
     
-    // Fallback Data
+    // Fallback Data (So the user sees SOMETHING instead of a crash)
     return NextResponse.json({
-      summary: "We couldn't reach the AI guru, but here is a balanced routine for you.",
+      summary: "The AI is meditating right now. Here is a classic wellness routine for you.",
       routine: [
-        { name: "Mountain Pose", sanskrit: "Tadasana", duration: "2 mins", type: "Warm Up", benefit: "Improves posture and stability.", instruction: "Stand tall, feet together, shoulders rolled back." },
-        { name: "Downward Dog", sanskrit: "Adho Mukha Svanasana", duration: "3 mins", type: "Flow", benefit: "Stretches hamstrings and strengthens arms.", instruction: "Press hands into mat, lift hips high." },
-        { name: "Child's Pose", sanskrit: "Balasana", duration: "5 mins", type: "Cool Down", benefit: "Relieves stress and fatigue.", instruction: "Sit back on heels, forehead to mat." }
+        { name: "Mountain Pose", sanskrit: "Tadasana", duration: "2 mins", type: "Warm Up", benefit: "Improves posture.", instruction: "Stand tall, feet together." },
+        { name: "Cat-Cow", sanskrit: "Marjaryasana-Bitilasana", duration: "3 mins", type: "Flow", benefit: "Spine flexibility.", instruction: "Inhale arch, exhale round." },
+        { name: "Child's Pose", sanskrit: "Balasana", duration: "5 mins", type: "Cool Down", benefit: "Rest and reset.", instruction: "Hips to heels, forehead down." }
       ],
       diet: [
-        { time: "Hydration", item: "Warm Lemon Water", "reason": "Aids digestion and hydration." }
+        { time: "Tip", item: "Hydration", reason: "Drink water before and after session." }
       ],
-      mindfulness: "Take 5 deep breaths, counting to 4 on inhale and 6 on exhale."
+      mindfulness: "Close your eyes and count 10 deep breaths."
     }); 
   }
 }
