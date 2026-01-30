@@ -22,7 +22,8 @@ export async function POST(req: Request) {
       "gemini-1.5-flash-latest",     // Latest alias
       "gemini-1.5-pro",              // Standard Pro
       "gemini-pro",                  // Legacy Stable (MOST RELIABLE)
-      "gemini-1.0-pro"               // Oldest Backup
+      "gemini-1.0-pro", 
+      "gemini-2.5-flash",           // Oldest Backup
     ];
     
     let result: any = null;
