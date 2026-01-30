@@ -14,9 +14,16 @@ export async function POST(req: Request) {
     const genAI = new GoogleGenerativeAI(apiKey);
 
     // --- SMART MODEL SELECTOR ---
-    const modelNames = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
+    // The code will try these models in order. 
+    // If 'flash' gives a 404, it immediately tries 'pro'.
+    const modelNames = [
+      "gemini-2.0-flash-exp", 
+      "gemini-1.5-flash", 
+      "gemini-1.5-pro", 
+      "gemini-pro"
+    ];
     
-    let result: any = null; // Initialize as null to satisfy TS
+    let result: any = null;
     let success = false;
     let lastError;
 
@@ -42,33 +49,33 @@ export async function POST(req: Request) {
       }
     `;
 
-    // Try models one by one
+    // 1. Try models one by one
     for (const modelName of modelNames) {
       try {
-        console.log(`🤖 Attempting to generate with model: ${modelName}...`);
+        console.log(`🤖 Attempting model: ${modelName}...`);
         const model = genAI.getGenerativeModel({ model: modelName });
         result = await model.generateContent(prompt);
         success = true;
-        break; // Success! Exit loop.
+        break; // It worked! Exit loop.
       } catch (e: any) {
         console.warn(`⚠️ Model ${modelName} failed: ${e.message}`);
         lastError = e;
       }
     }
 
-    // --- THE FIX IS HERE ---
-    // We check (!result) so TypeScript knows 'result' is definitely defined below
+    // 2. Safety Check (Fixes "result is undefined" error)
     if (!success || !result) {
-      throw lastError || new Error("All AI models failed.");
+      throw lastError || new Error("All AI models failed to respond.");
     }
 
+    // 3. Process Response
     const response = await result.response;
     let text = response.text();
 
     // Clean JSON (Remove ```json and ```)
     text = text.replace(/```json/g, '').replace(/```/g, '').trim();
     
-    // Extra Safety: Find the first '{' and last '}'
+    // Extra Safety: Find the first '{' and last '}' to handle intro text
     const start = text.indexOf('{');
     const end = text.lastIndexOf('}');
     if (start !== -1 && end !== -1) {
@@ -81,9 +88,9 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error('❌ FINAL AI FAILURE:', error.message);
     
-    // Fallback Data
+    // FALLBACK DATA (Prevents Crash if API is totally down)
     return NextResponse.json({
-      summary: "The AI is currently offline, but here is a balanced routine.",
+      summary: "The AI is currently unavailable, but here is a balanced routine.",
       routine: [
         { name: "Mountain Pose", sanskrit: "Tadasana", duration: "2 mins", type: "Warm Up", benefit: "Improves posture.", instruction: "Stand tall." },
         { name: "Cat-Cow", sanskrit: "Marjaryasana", duration: "3 mins", type: "Flow", benefit: "Spine health.", instruction: "Inhale arch, exhale round." }
