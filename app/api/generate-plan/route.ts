@@ -13,14 +13,16 @@ export async function POST(req: Request) {
 
     const genAI = new GoogleGenerativeAI(apiKey);
 
-    // --- SMART MODEL SELECTOR ---
-    // The code will try these models in order. 
-    // If 'flash' gives a 404, it immediately tries 'pro'.
+    // --- ULTIMATE MODEL LIST ---
+    // The code will try these in order. 
+    // "gemini-pro" is the safety net that usually works for everyone.
     const modelNames = [
-      "gemini-2.0-flash-exp", 
-      "gemini-1.5-flash", 
-      "gemini-1.5-pro", 
-      "gemini-pro"
+      "gemini-2.0-flash-exp",        // Experimental (often free)
+      "gemini-1.5-flash",            // Standard Fast
+      "gemini-1.5-flash-latest",     // Latest alias
+      "gemini-1.5-pro",              // Standard Pro
+      "gemini-pro",                  // Legacy Stable (MOST RELIABLE)
+      "gemini-1.0-pro"               // Oldest Backup
     ];
     
     let result: any = null;
@@ -56,14 +58,15 @@ export async function POST(req: Request) {
         const model = genAI.getGenerativeModel({ model: modelName });
         result = await model.generateContent(prompt);
         success = true;
+        console.log(`✅ Success with model: ${modelName}`);
         break; // It worked! Exit loop.
       } catch (e: any) {
-        console.warn(`⚠️ Model ${modelName} failed: ${e.message}`);
+        console.warn(`⚠️ Model ${modelName} failed: ${e.message.substring(0, 100)}...`);
         lastError = e;
       }
     }
 
-    // 2. Safety Check (Fixes "result is undefined" error)
+    // 2. Safety Check
     if (!success || !result) {
       throw lastError || new Error("All AI models failed to respond.");
     }
@@ -75,7 +78,7 @@ export async function POST(req: Request) {
     // Clean JSON (Remove ```json and ```)
     text = text.replace(/```json/g, '').replace(/```/g, '').trim();
     
-    // Extra Safety: Find the first '{' and last '}' to handle intro text
+    // Extra Safety: Find the first '{' and last '}'
     const start = text.indexOf('{');
     const end = text.lastIndexOf('}');
     if (start !== -1 && end !== -1) {
@@ -88,7 +91,7 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error('❌ FINAL AI FAILURE:', error.message);
     
-    // FALLBACK DATA (Prevents Crash if API is totally down)
+    // FALLBACK DATA (Prevents Crash)
     return NextResponse.json({
       summary: "The AI is currently unavailable, but here is a balanced routine.",
       routine: [
