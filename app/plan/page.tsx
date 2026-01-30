@@ -1,33 +1,38 @@
-'use client';
+'use client'; 
 export const dynamic = 'force-dynamic';
+
 import { useUserStore } from '@/lib/store';
-import { motion } from 'framer-motion';
 import { useSession, signOut } from "next-auth/react";
 import { useEffect, useState } from "react";
 
-// Updated Interface to match new API data
-interface YogaPlan {
-  summary: string;
-  routine: { 
-    name: string; 
-    sanskrit: string; 
-    duration: string; 
-    type: string; 
-    benefit: string; 
-    instruction: string; 
-  }[];
-  diet: { time: string; item: string; reason: string }[];
-  mindfulness: string;
-}
+// Fallback Plan (Shows if AI fails or times out)
+const FALLBACK_PLAN = {
+  summary: "We couldn't reach the AI guru, but here is a balanced routine for you.",
+  routine: [
+    { name: "Mountain Pose", sanskrit: "Tadasana", duration: "2 mins", type: "Warm Up", benefit: "Improves posture and stability.", instruction: "Stand tall, feet together, shoulders rolled back." },
+    { name: "Downward Dog", sanskrit: "Adho Mukha Svanasana", duration: "3 mins", type: "Flow", benefit: "Stretches hamstrings and strengthens arms.", instruction: "Press hands into mat, lift hips high." },
+    { name: "Child's Pose", sanskrit: "Balasana", duration: "5 mins", type: "Cool Down", benefit: "Relieves stress and fatigue.", instruction: "Sit back on heels, forehead to mat." }
+  ],
+  diet: [
+    { time: "Hydration", item: "Warm Lemon Water", reason: "Aids digestion and hydration." },
+    { time: "Post-Yoga", item: "Banana or Nuts", reason: "Quick energy replenishment." }
+  ],
+  mindfulness: "Take 5 deep breaths, counting to 4 on inhale and 6 on exhale."
+};
 
 export default function PlanPage() {
   const { data: session } = useSession();
   const { profile } = useUserStore();
-  const [plan, setPlan] = useState<YogaPlan | null>(null);
+  const [plan, setPlan] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!profile.goals || plan) return; // Prevent double fetch
+    // Prevent fetching if no goals set (likely direct navigation without onboarding)
+    if (!profile.goals) {
+        setLoading(false);
+        return;
+    }
 
     const fetchAIPlan = async () => {
       try {
@@ -35,14 +40,20 @@ export default function PlanPage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            // --- FIX IS HERE: Spread first, then overwrite/default ---
             ...profile,
-            name: session?.user?.name || "Yogi"
+            name: profile.name || session?.user?.name || "Yogi", 
           }),
         });
+        
+        if (!res.ok) throw new Error("Failed to fetch plan");
+        
         const data = await res.json();
         setPlan(data);
       } catch (err) {
-        console.error(err);
+        console.error("Plan Fetch Error:", err);
+        setError("AI Service Unavailable. Showing Default Plan.");
+        setPlan(FALLBACK_PLAN); // <--- Load Backup Plan
       } finally {
         setLoading(false);
       }
@@ -62,12 +73,13 @@ export default function PlanPage() {
     <div className="min-h-screen bg-stone-50 p-6 md:p-12">
       <header className="max-w-5xl mx-auto mb-10 flex justify-between items-end border-b pb-6 border-stone-200">
         <div>
-          <h1 className="text-4xl font-bold text-teal-900 tracking-tight">
+          <h1 className="text-4xl font-bold text-teal-900">
             Namaste, {session?.user?.name?.split(' ')[0] || "Yogi"}
           </h1>
           <p className="text-stone-600 mt-2 text-lg">
-            {plan?.summary || `Your personalized ${profile.goals?.[0]} plan`}
+            {plan?.summary || `Your personalized ${profile.goals?.[0] || 'Wellness'} plan`}
           </p>
+          {error && <p className="text-amber-600 text-sm mt-1 bg-amber-50 inline-block px-2 py-1 rounded border border-amber-200">⚠️ {error}</p>}
         </div>
         <button onClick={() => signOut({ callbackUrl: '/' })} className="text-sm text-stone-500 hover:text-red-500 transition">
           Sign Out
@@ -78,17 +90,13 @@ export default function PlanPage() {
         <div className="max-w-5xl mx-auto grid lg:grid-cols-3 gap-8">
           
           {/* LEFT COLUMN: Yoga Routine */}
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }} 
-            animate={{ opacity: 1, y: 0 }} 
-            className="lg:col-span-2 space-y-6"
-          >
+          <div className="lg:col-span-2 space-y-6">
             <h2 className="text-2xl font-bold text-teal-800 flex items-center gap-2">
               🧘 Daily Flow
             </h2>
             
             <div className="bg-white rounded-3xl shadow-sm border border-stone-100 overflow-hidden">
-              {plan.routine.map((pose, i) => (
+              {plan.routine?.map((pose: any, i: number) => (
                 <div key={i} className="p-6 border-b border-stone-100 last:border-0 hover:bg-stone-50 transition-colors">
                   <div className="flex justify-between items-start mb-2">
                     <div>
@@ -96,8 +104,8 @@ export default function PlanPage() {
                       <p className="text-sm text-stone-500 italic">{pose.sanskrit}</p>
                     </div>
                     <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide
-                      ${pose.type.includes('Warm') ? 'bg-orange-100 text-orange-700' : 
-                        pose.type.includes('Cool') ? 'bg-blue-100 text-blue-700' : 'bg-teal-100 text-teal-700'}`}>
+                      ${pose.type?.includes('Warm') ? 'bg-orange-100 text-orange-700' : 
+                        pose.type?.includes('Cool') ? 'bg-blue-100 text-blue-700' : 'bg-teal-100 text-teal-700'}`}>
                       {pose.duration}
                     </span>
                   </div>
@@ -106,22 +114,17 @@ export default function PlanPage() {
                 </div>
               ))}
             </div>
-          </motion.div>
+          </div>
 
           {/* RIGHT COLUMN: Diet & Mindfulness */}
-          <motion.div 
-            initial={{ opacity: 0, x: 20 }} 
-            animate={{ opacity: 1, x: 0 }} 
-            transition={{ delay: 0.2 }}
-            className="space-y-6"
-          >
+          <div className="space-y-6">
             {/* Diet Card */}
             <div className="bg-white p-6 rounded-3xl shadow-sm border border-stone-100">
               <h2 className="text-xl font-bold text-teal-800 mb-4 flex items-center gap-2">
                🥗 Sattvic Diet
               </h2>
               <ul className="space-y-6">
-                {plan.diet.map((item, i) => (
+                {plan.diet?.map((item: any, i: number) => (
                   <li key={i} className="relative pl-6 border-l-2 border-stone-200">
                     <div className="absolute -left-1.25 top-0 w-2 h-2 rounded-full bg-teal-400"></div>
                     <span className="block text-xs font-bold text-stone-400 uppercase tracking-wider mb-1">{item.time}</span>
@@ -139,7 +142,7 @@ export default function PlanPage() {
                 "{plan.mindfulness}"
               </p>
             </div>
-          </motion.div>
+          </div>
 
         </div>
       )}

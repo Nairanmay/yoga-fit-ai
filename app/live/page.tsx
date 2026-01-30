@@ -1,49 +1,65 @@
-'use client';
+'use client'; 
+export const dynamic = 'force-dynamic';
 
 import React, { useRef, useState, useEffect } from 'react';
 import Webcam from 'react-webcam';
-import { useRouter } from 'next/navigation';
-
-// We do NOT import TensorFlow here at the top level anymore.
-// This prevents the Vercel build server from crashing.
-
-export const dynamic = 'force-dynamic'; // Disable static snapshotting
 
 export default function LiveSession() {
   const webcamRef = useRef<Webcam>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [feedback, setFeedback] = useState("Initializing AI...");
-  const [isCorrect, setIsCorrect] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  
+  // --- DEBUG STATE ---
+  const [status, setStatus] = useState("Initializing...");
+  const [logs, setLogs] = useState<string[]>([]);
+  const [modelLoaded, setModelLoaded] = useState(false);
 
-  // Load AI Models dynamically inside useEffect
+  // Helper to print logs to screen
+  const addLog = (msg: string) => {
+    console.log(msg);
+    setLogs(prev => [...prev.slice(-4), msg]); // Keep last 5 logs
+  };
+
   useEffect(() => {
     let detector: any;
     let rafId: number;
 
-    const loadModels = async () => {
+    const loadAI = async () => {
       try {
-        // 1. Dynamic Imports (Only loads in browser)
+        addLog("Step 1: Starting Import...");
+        
+        // 1. Load Libraries
         const tf = await import('@tensorflow/tfjs-core');
         await import('@tensorflow/tfjs-backend-webgl');
         const poseDetection = await import('@tensorflow-models/pose-detection');
+        
+        addLog("Step 2: TF Imported. Setting Backend...");
 
-        // 2. Setup Backend
-        await tf.setBackend('webgl');
+        // 2. Set Backend (Try WebGL, fallback to CPU if fails)
+        try {
+            await tf.setBackend('webgl');
+            addLog("Backend set to WebGL");
+        } catch (e) {
+            addLog("WebGL failed, trying cpu...");
+            await tf.setBackend('cpu');
+        }
+        
         await tf.ready();
+        addLog("Step 3: TF Ready. Loading Model...");
 
-        // 3. Create Detector
+        // 3. Load Model
         detector = await poseDetection.createDetector(
           poseDetection.SupportedModels.MoveNet,
           { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING }
         );
 
-        setIsLoading(false);
-        setFeedback("Go to Full Body View");
+        addLog("Step 4: Model Loaded Successfully!");
+        setModelLoaded(true);
+        setStatus("Align your body in frame");
         detect(detector);
-      } catch (err) {
-        console.error("AI Load Error:", err);
-        setFeedback("Error loading AI. Refresh page.");
+
+      } catch (err: any) {
+        setStatus("CRITICAL ERROR");
+        addLog(`Error: ${err.message}`);
       }
     };
 
@@ -57,44 +73,39 @@ export default function LiveSession() {
         const videoWidth = video.videoWidth;
         const videoHeight = video.videoHeight;
 
+        // Force canvas size to match video
         if (canvasRef.current) {
-          canvasRef.current.width = videoWidth;
-          canvasRef.current.height = videoHeight;
+            canvasRef.current.width = videoWidth;
+            canvasRef.current.height = videoHeight;
         }
 
-        // Estimate poses
-        const poses = await net.estimatePoses(video);
-
-        // Draw and Analyze
-        if (poses.length > 0) {
-           // Simple visual feedback logic
-           // (You can re-add the advanced angle math here if needed)
-           if (canvasRef.current) {
-             const ctx = canvasRef.current.getContext("2d");
-             drawSkeleton(ctx, poses[0].keypoints);
-           }
+        try {
+            const poses = await net.estimatePoses(video);
+            if (poses.length > 0 && canvasRef.current) {
+                const ctx = canvasRef.current.getContext("2d");
+                if (ctx) drawSkeleton(ctx, poses[0].keypoints);
+            }
+        } catch (e) {
+            // Ignore frame errors
         }
       }
-      // Loop
       rafId = requestAnimationFrame(() => detect(net));
     };
 
-    // Helper to draw (Simplified for this file)
     const drawSkeleton = (ctx: any, keypoints: any[]) => {
         ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
         keypoints.forEach((kp: any) => {
             if(kp.score > 0.3) {
                 ctx.beginPath();
-                ctx.arc(kp.x, kp.y, 5, 0, 2 * Math.PI);
-                ctx.fillStyle = "#00ff00";
+                ctx.arc(kp.x, kp.y, 8, 0, 2 * Math.PI);
+                ctx.fillStyle = "#00ff00"; // Green dots
                 ctx.fill();
             }
         });
     };
 
-    loadModels();
+    loadAI();
 
-    // Cleanup function
     return () => {
         if (rafId) cancelAnimationFrame(rafId);
         if (detector) detector.dispose();
@@ -103,24 +114,23 @@ export default function LiveSession() {
 
   return (
     <div className="relative min-h-screen bg-black flex flex-col items-center justify-center">
-      {/* Loading Overlay */}
-      {isLoading && (
-        <div className="absolute z-50 text-teal-400 text-xl font-bold animate-pulse">
-          Loading AI Models...
-        </div>
-      )}
-
-      <div className="absolute top-4 z-20 bg-black/50 px-6 py-3 rounded-full backdrop-blur-md border border-white/10">
-        <h2 className={`text-xl font-bold ${isCorrect ? 'text-green-400' : 'text-white'}`}>
-            {feedback}
-        </h2>
+      
+      {/* --- DEBUG OVERLAY (Visible on phone/web) --- */}
+      <div className="absolute top-0 left-0 w-full bg-stone-900/80 text-green-400 font-mono text-xs p-2 z-50">
+        <p className="font-bold text-white border-b border-white/20 pb-1 mb-1">Status: {status}</p>
+        {logs.map((log, i) => (
+            <div key={i}>{log}</div>
+        ))}
       </div>
 
-      <div className="relative w-full max-w-lg aspect-3/4 lg:aspect-video rounded-2xl overflow-hidden border-2 border-stone-800">
+      {/* Camera View */}
+      <div className="relative w-full max-w-lg aspect-3/4 lg:aspect-video rounded-2xl overflow-hidden border-2 border-stone-800 mt-12">
         <Webcam
             ref={webcamRef}
             className="absolute inset-0 w-full h-full object-cover"
             mirrored
+            // Ensure webcam works on mobile (facingMode: user)
+            videoConstraints={{ facingMode: "user" }}
         />
         <canvas
             ref={canvasRef}
@@ -128,11 +138,14 @@ export default function LiveSession() {
         />
       </div>
       
-      <div className="absolute bottom-10 z-20">
-         <div className="bg-white/10 p-4 rounded-lg text-white text-sm backdrop-blur">
-             <p>Ensure good lighting. Stand 2-3 meters back.</p>
-         </div>
-      </div>
+      {!modelLoaded && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-40">
+            <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-green-500 mx-auto mb-4"></div>
+                <p className="text-white">Loading AI Brain...</p>
+            </div>
+        </div>
+      )}
     </div>
   );
 }
