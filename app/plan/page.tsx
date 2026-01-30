@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 'use client';
 import { useUserStore } from '@/lib/store';
 import { motion } from 'framer-motion';

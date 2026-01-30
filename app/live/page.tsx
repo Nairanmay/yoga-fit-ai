@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 'use client';
 import React, { useRef, useState, useEffect } from 'react';
 import Webcam from 'react-webcam';
