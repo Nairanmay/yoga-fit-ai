@@ -13,15 +13,14 @@ export async function POST(req: Request) {
 
     const genAI = new GoogleGenerativeAI(apiKey);
 
-    // --- ULTIMATE MODEL LIST ---
-    // The code will try these in order until one works.
+    // --- MODEL PRIORITY LIST ---
+    // 1. We force "gemini-2.5-flash" FIRST as requested.
+    // 2. We keep the others as backup just in case 2.5 hits a limit.
     const modelNames = [
-      "gemini-2.0-flash-exp",        // Try Newest First
-      "gemini-1.5-flash",            // Standard Fast
-      "gemini-1.5-flash-latest",     // Latest Alias
-      "gemini-1.5-pro",              // Standard Pro
-      "gemini-pro",                  // ✅ LEGACY STABLE (The Safety Net)
-      "gemini-1.0-pro"               // Oldest Backup
+      "gemini-2.5-flash",            // ⭐️ YOUR PREFERRED MODEL
+      "gemini-1.5-flash",            // Standard Fast Backup
+      "gemini-1.5-pro",              // Standard Pro Backup
+      "gemini-pro",                  // Legacy Stable (Universal Backup)
     ];
     
     let result: any = null;
@@ -50,7 +49,7 @@ export async function POST(req: Request) {
       }
     `;
 
-    // 1. Try models one by one
+    // Try models in order
     for (const modelName of modelNames) {
       try {
         console.log(`🤖 Attempting model: ${modelName}...`);
@@ -58,19 +57,19 @@ export async function POST(req: Request) {
         result = await model.generateContent(prompt);
         success = true;
         console.log(`✅ Success with model: ${modelName}`);
-        break; // It worked! Exit loop.
+        break; // Stop as soon as 2.5 (or the next available one) works
       } catch (e: any) {
         console.warn(`⚠️ Model ${modelName} failed: ${e.message.substring(0, 100)}...`);
         lastError = e;
       }
     }
 
-    // 2. Safety Check
+    // Safety Check
     if (!success || !result) {
       throw lastError || new Error("All AI models failed to respond.");
     }
 
-    // 3. Process Response
+    // Process Response
     const response = await result.response;
     let text = response.text();
 
@@ -90,9 +89,9 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error('❌ FINAL AI FAILURE:', error.message);
     
-    // FALLBACK DATA (Prevents Crash)
+    // Fallback Data
     return NextResponse.json({
-      summary: "The AI is currently unavailable, but here is a balanced routine.",
+      summary: "The AI is meditating. Here is a balanced routine for you.",
       routine: [
         { name: "Mountain Pose", sanskrit: "Tadasana", duration: "2 mins", type: "Warm Up", benefit: "Improves posture.", instruction: "Stand tall." },
         { name: "Cat-Cow", sanskrit: "Marjaryasana", duration: "3 mins", type: "Flow", benefit: "Spine health.", instruction: "Inhale arch, exhale round." }
