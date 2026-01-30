@@ -13,14 +13,15 @@ export async function POST(req: Request) {
 
     const genAI = new GoogleGenerativeAI(apiKey);
 
-    // --- MODEL PRIORITY LIST ---
-    // 1. We force "gemini-2.5-flash" FIRST as requested.
-    // 2. We keep the others as backup just in case 2.5 hits a limit.
+    // --- CLEANED MODEL LIST ---
+    // 1. gemini-2.5-flash (Best Quality)
+    // 2. gemini-1.5-flash (Standard Backup)
+    // 3. gemini-1.5-flash-8b (High Speed / Low Error Backup)
     const modelNames = [
-      "gemini-2.5-flash",            // ⭐️ YOUR PREFERRED MODEL
-      "gemini-1.5-flash",            // Standard Fast Backup
-      "gemini-1.5-pro",              // Standard Pro Backup
-      "gemini-pro",                  // Legacy Stable (Universal Backup)
+      "gemini-2.5-flash",        
+      "gemini-2.0-flash-exp",    
+      "gemini-1.5-flash",        
+      "gemini-1.5-flash-8b"      // <--- NEW: Very fast, reliable backup
     ];
     
     let result: any = null;
@@ -49,7 +50,7 @@ export async function POST(req: Request) {
       }
     `;
 
-    // Try models in order
+    // Try models one by one
     for (const modelName of modelNames) {
       try {
         console.log(`🤖 Attempting model: ${modelName}...`);
@@ -57,7 +58,7 @@ export async function POST(req: Request) {
         result = await model.generateContent(prompt);
         success = true;
         console.log(`✅ Success with model: ${modelName}`);
-        break; // Stop as soon as 2.5 (or the next available one) works
+        break; 
       } catch (e: any) {
         console.warn(`⚠️ Model ${modelName} failed: ${e.message.substring(0, 100)}...`);
         lastError = e;
@@ -73,10 +74,8 @@ export async function POST(req: Request) {
     const response = await result.response;
     let text = response.text();
 
-    // Clean JSON (Remove ```json and ```)
+    // Clean JSON
     text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    
-    // Extra Safety: Find the first '{' and last '}'
     const start = text.indexOf('{');
     const end = text.lastIndexOf('}');
     if (start !== -1 && end !== -1) {
