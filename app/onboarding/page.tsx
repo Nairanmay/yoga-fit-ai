@@ -13,7 +13,7 @@ export default function Onboarding() {
     else router.push('/plan');
   };
 
-  // --- FIX: Helper to allow Multiple Selections ---
+  // --- FIX: Allow Multiple Goals ---
   const toggleGoal = (goal: string) => {
     const currentGoals = profile.goals || [];
     if (currentGoals.includes(goal)) {

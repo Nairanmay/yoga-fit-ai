@@ -14,14 +14,14 @@ export async function POST(req: Request) {
     const genAI = new GoogleGenerativeAI(apiKey);
 
     // --- ULTIMATE MODEL LIST ---
-    // Moving your working model to the TOP to make it faster.
+    // The code will try these in order until one works.
     const modelNames = [
-      "gemini-2.5-flash",            // ✅ Your working model (Primary)
-      "gemini-2.0-flash-exp",        // Experimental
+      "gemini-2.0-flash-exp",        // Try Newest First
       "gemini-1.5-flash",            // Standard Fast
-      "gemini-1.5-flash-latest",     // Latest alias
+      "gemini-1.5-flash-latest",     // Latest Alias
       "gemini-1.5-pro",              // Standard Pro
-      "gemini-pro",                  // Legacy Stable (Safety Net)
+      "gemini-pro",                  // ✅ LEGACY STABLE (The Safety Net)
+      "gemini-1.0-pro"               // Oldest Backup
     ];
     
     let result: any = null;
