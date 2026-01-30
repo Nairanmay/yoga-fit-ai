@@ -1,16 +1,13 @@
 import type { NextConfig } from "next";
 
-// We use 'any' to bypass strict TypeScript checks so we can add the 
-// specific flags Vercel is asking for without build errors.
-const nextConfig: any = {
-  // 1. SILENCE THE TURBOPACK ERROR
-  // The error message specifically asked for this to handle the conflict.
-  experimental: {
-    turbo: {}
-  },
-  
-  // 2. FORCE WEBPACK (Crucial for TensorFlow)
-  webpack: (config: any) => {
+const nextConfig: NextConfig = {
+  // 1. ADD TURBO CONFIG AT ROOT (Not experimental)
+  // This tells Next.js: "I know Turbopack is active, here is the config."
+  // Leaving it empty resolves the conflict with the Webpack config.
+  turbo: {},
+
+  // 2. FORCE WEBPACK POLYFILLS (Required for TensorFlow)
+  webpack: (config) => {
     config.resolve.fallback = {
       ...config.resolve.fallback,
       fs: false,
@@ -20,7 +17,7 @@ const nextConfig: any = {
     return config;
   },
 
-  // 3. Transpile the heavy AI packages so Webpack can read them
+  // 3. Transpile Heavy AI Libraries
   transpilePackages: [
     '@tensorflow/tfjs-core',
     '@tensorflow/tfjs-converter',
@@ -29,16 +26,16 @@ const nextConfig: any = {
     '@mediapipe/pose'
   ],
 
-  // 4. PREVENT TIMEOUTS & MEMORY CRASHES
+  // 4. Prevent Memory Crashes during Static Gen
   staticPageGenerationTimeout: 1000, 
   
-  // 5. IGNORE ERRORS DURING BUILD
+  // 5. Ignore Typescript Errors during Build
   typescript: {
     ignoreBuildErrors: true,
   },
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+
+  // REMOVED: 'eslint' block. 
+  // It is deprecated in Next.js 16 and causes build warnings.
 };
 
 export default nextConfig;
