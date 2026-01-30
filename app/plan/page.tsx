@@ -1,5 +1,5 @@
-export const dynamic = 'force-dynamic';
 'use client';
+export const dynamic = 'force-dynamic';
 import { useUserStore } from '@/lib/store';
 import { motion } from 'framer-motion';
 import { useSession, signOut } from "next-auth/react";
