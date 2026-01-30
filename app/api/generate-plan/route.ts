@@ -5,26 +5,30 @@ export async function POST(req: Request) {
   try {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      console.error("❌ Error: Missing GEMINI_API_KEY in Environment Variables");
-      throw new Error('Missing API Key');
+      return NextResponse.json({ error: 'Missing API Key' }, { status: 500 });
     }
 
     const body = await req.json();
     const { name, age, weight, goals, duration, injuries } = body;
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    // Use the standard stable model
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+    // --- SMART MODEL SELECTOR ---
+    const modelNames = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
+    
+    let result: any = null; // Initialize as null to satisfy TS
+    let success = false;
+    let lastError;
 
     const prompt = `
-      You are an expert Yoga Instructor. Create a JSON-only 1-day plan for:
+      You are an expert Yoga Instructor. Create a valid JSON 1-day plan for:
       - Name: ${name || "Yogi"}
       - Profile: ${age || 25} yrs, ${weight || 70}kg
       - Goals: ${goals?.join(", ") || "General Fitness"}
       - Duration: ${duration || 30} mins
       - Injuries: ${injuries || "None"}
 
-      Return strictly valid JSON. No markdown backticks. No intro text.
+      Return ONLY strictly valid JSON (NO markdown, NO backticks).
       Structure:
       {
         "summary": "Motivating sentence.",
@@ -38,40 +42,56 @@ export async function POST(req: Request) {
       }
     `;
 
-    const result = await model.generateContent(prompt);
+    // Try models one by one
+    for (const modelName of modelNames) {
+      try {
+        console.log(`🤖 Attempting to generate with model: ${modelName}...`);
+        const model = genAI.getGenerativeModel({ model: modelName });
+        result = await model.generateContent(prompt);
+        success = true;
+        break; // Success! Exit loop.
+      } catch (e: any) {
+        console.warn(`⚠️ Model ${modelName} failed: ${e.message}`);
+        lastError = e;
+      }
+    }
+
+    // --- THE FIX IS HERE ---
+    // We check (!result) so TypeScript knows 'result' is definitely defined below
+    if (!success || !result) {
+      throw lastError || new Error("All AI models failed.");
+    }
+
     const response = await result.response;
     let text = response.text();
 
-    console.log("🤖 AI Raw Response:", text.substring(0, 100) + "..."); // Log first 100 chars for debug
-
-    // --- ROBUST JSON CLEANING ---
-    // Sometimes AI adds "```json ... ```" or "Here is the plan: { ... }"
-    // We find the first "{" and the last "}" to extract just the JSON object.
-    const jsonStart = text.indexOf('{');
-    const jsonEnd = text.lastIndexOf('}');
+    // Clean JSON (Remove ```json and ```)
+    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
     
-    if (jsonStart !== -1 && jsonEnd !== -1) {
-      text = text.substring(jsonStart, jsonEnd + 1);
+    // Extra Safety: Find the first '{' and last '}'
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start !== -1 && end !== -1) {
+        text = text.substring(start, end + 1);
     }
 
     const plan = JSON.parse(text);
     return NextResponse.json(plan);
 
   } catch (error: any) {
-    console.error('⚠️ AI Plan Generation Failed:', error.message || error);
+    console.error('❌ FINAL AI FAILURE:', error.message);
     
-    // Fallback Data (So the user sees SOMETHING instead of a crash)
+    // Fallback Data
     return NextResponse.json({
-      summary: "The AI is meditating right now. Here is a classic wellness routine for you.",
+      summary: "The AI is currently offline, but here is a balanced routine.",
       routine: [
-        { name: "Mountain Pose", sanskrit: "Tadasana", duration: "2 mins", type: "Warm Up", benefit: "Improves posture.", instruction: "Stand tall, feet together." },
-        { name: "Cat-Cow", sanskrit: "Marjaryasana-Bitilasana", duration: "3 mins", type: "Flow", benefit: "Spine flexibility.", instruction: "Inhale arch, exhale round." },
-        { name: "Child's Pose", sanskrit: "Balasana", duration: "5 mins", type: "Cool Down", benefit: "Rest and reset.", instruction: "Hips to heels, forehead down." }
+        { name: "Mountain Pose", sanskrit: "Tadasana", duration: "2 mins", type: "Warm Up", benefit: "Improves posture.", instruction: "Stand tall." },
+        { name: "Cat-Cow", sanskrit: "Marjaryasana", duration: "3 mins", type: "Flow", benefit: "Spine health.", instruction: "Inhale arch, exhale round." }
       ],
       diet: [
-        { time: "Tip", item: "Hydration", reason: "Drink water before and after session." }
+        { time: "Tip", item: "Hydration", reason: "Drink water." }
       ],
-      mindfulness: "Close your eyes and count 10 deep breaths."
+      mindfulness: "Take 10 deep breaths."
     }); 
   }
 }
