@@ -14,16 +14,14 @@ export async function POST(req: Request) {
     const genAI = new GoogleGenerativeAI(apiKey);
 
     // --- ULTIMATE MODEL LIST ---
-    // The code will try these in order. 
-    // "gemini-pro" is the safety net that usually works for everyone.
+    // Moving your working model to the TOP to make it faster.
     const modelNames = [
-      "gemini-2.0-flash-exp",        // Experimental (often free)
+      "gemini-2.5-flash",            // ✅ Your working model (Primary)
+      "gemini-2.0-flash-exp",        // Experimental
       "gemini-1.5-flash",            // Standard Fast
       "gemini-1.5-flash-latest",     // Latest alias
       "gemini-1.5-pro",              // Standard Pro
-      "gemini-pro",                  // Legacy Stable (MOST RELIABLE)
-      "gemini-1.0-pro", 
-      "gemini-2.5-flash",           // Oldest Backup
+      "gemini-pro",                  // Legacy Stable (Safety Net)
     ];
     
     let result: any = null;
